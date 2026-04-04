@@ -189,6 +189,37 @@ journalctl -b -t t2-post-resume --no-pager
 systemctl status dev-tiny_dfr_display.device tiny-dfr.service --no-pager
 ```
 
+The updated post-resume helper also writes a small summary table here after wake,
+including:
+
+- suspend entered
+- suspend exited
+- time asleep
+- power source
+- battery before / after
+- battery delta
+- estimated sleep drain
+- matched log lines
+- unique issue types
+
+## Measuring Suspend Battery Drain
+
+Yes, you can use this setup to measure parasitic draw during suspend.
+
+The post-resume helper snapshots battery state immediately before suspend and
+again after wake, then logs the delta in the `t2-post-resume` summary table.
+
+For useful numbers:
+
+- test on battery, not on AC
+- use a longer sleep window, not a 60-90 second lid-close
+- run at least a few 30-60 minute tests
+- for a stronger check, do one overnight suspend on battery
+
+Short sleeps are still useful for functional testing, but they are too short to
+say much about real parasitic drain because battery counters can quantize or
+barely move.
+
 ### Current kernel command line
 
 ```bash
@@ -247,6 +278,30 @@ That made the BCE input recovery survive the suspend/resume transaction reliably
 
 - keyboard and trackpad to return
 - Touch Bar recovery to happen after resume, not during service teardown
+
+## Robustness
+
+This is good enough to call a working T2 Linux suspend solution for Omarchy on
+`MacBookPro16,1`, but I would not call it perfect or macOS-grade yet.
+
+What is strong now:
+
+- lid close reaches real suspend
+- wake returns the internal display and input devices
+- keyboard backlight is handled explicitly in user space
+- Touch Bar recovery is materially better than the stock path
+- the post-resume journal summary makes failures measurable
+
+What is still weaker than a native macOS experience:
+
+- the setup still relies on model-specific suspend helpers and recovery hooks
+- hybrid graphics remains the least elegant part of the stack
+- Touch Bar recovery is the most fragile path
+- some resume-time kernel noise is still expected on T2 Linux
+
+If you want to keep refining it, the right next step is not more blind tweaking.
+It is measuring longer battery-backed suspends and then tuning against real
+drain numbers and repeatable failure signatures.
 
 ## References
 
