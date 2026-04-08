@@ -20,6 +20,9 @@ backup_if_exists /usr/local/libexec/t2-suspend-helper.sh
 backup_if_exists /usr/local/libexec/t2-post-resume.sh
 backup_if_exists /etc/systemd/system/suspend-fix-t2.service
 backup_if_exists /etc/systemd/system/t2-post-resume.service
+backup_if_exists /usr/lib/systemd/system-sleep/t2-fix
+backup_if_exists /usr/lib/systemd/system-sleep/touchbar-fix
+backup_if_exists /usr/lib/systemd/system-sleep/95-appletb-order
 
 install -d /usr/local/libexec
 
@@ -383,6 +386,18 @@ EOF_SERVICE
 systemctl daemon-reload
 systemctl enable suspend-fix-t2.service >/dev/null
 
+if [[ -e /usr/lib/systemd/system-sleep/t2-fix ]]; then
+  chmod -x /usr/lib/systemd/system-sleep/t2-fix
+fi
+
+if [[ -e /usr/lib/systemd/system-sleep/touchbar-fix ]]; then
+  chmod -x /usr/lib/systemd/system-sleep/touchbar-fix
+fi
+
+if [[ -e /usr/lib/systemd/system-sleep/95-appletb-order ]]; then
+  chmod -x /usr/lib/systemd/system-sleep/95-appletb-order
+fi
+
 # Best-effort current-boot touch bar recovery.
 systemctl stop tiny-dfr.service 2>/dev/null || true
 modprobe -r hid_appletb_kbd appletbdrm hid_appletb_bl 2>/dev/null || true
@@ -417,3 +432,6 @@ systemctl status suspend-fix-t2.service --no-pager | sed -n '1,40p'
 echo
 echo "Current tiny-dfr status:"
 systemctl status tiny-dfr.service --no-pager | sed -n '1,40p'
+echo
+echo "Disabled legacy hooks:"
+ls -l /usr/lib/systemd/system-sleep/t2-fix /usr/lib/systemd/system-sleep/touchbar-fix /usr/lib/systemd/system-sleep/95-appletb-order 2>/dev/null || true

@@ -1,135 +1,196 @@
-# T2 Mac Suspend Fix for Omarchy
+# NAME
 
-This bundle documents a working suspend/wake setup for T2 Macs running Omarchy on Arch with the `linux-t2` kernel.
+`macbook-16-1-t2-suspend-fix` - suspend, resume, Touch Bar, and backlight recovery helpers for T2 Macs running Omarchy on Arch Linux
 
-It was tested on:
+# SYNOPSIS
 
-- Model: 2019 16-inch MacBook Pro
-- SMBIOS: `MacBookPro16,1`
-- Distro: Omarchy / Arch Linux
-- Kernel: `linux-t2`
-- Bootloader: GRUB
-- Session: Hyprland + `hypridle`
-
-## What It Fixes
-
-This setup was built to address the usual T2 suspend problems:
-
-- lid close detected, but no real suspend
-- wake to blank or half-dead display
-- internal keyboard or trackpad not returning after wake
-- keyboard backlight not restoring
-- Touch Bar breaking after resume
-
-## What This Bundle Contains
-
-- `apply-t2-mac-sleep-fix.sh`
-  - Base suspend/wake fix for T2 on Omarchy.
-- `apply-t2-igpu-resume-fix.sh`
-  - iGPU-first workaround for hybrid graphics models like `MacBookPro16,1`.
-- `repair-t2-suspend-helper.sh`
-  - Earlier helper repair. Kept for reference/history.
-- `repair-t2-touchbar-resume.sh`
-  - Final Touch Bar resume repair.
-- `install-t2-touchbar-log-cleanup.sh`
-  - Optional cleanup for noisy `systemd-backlight` log spam on Touch Bar backlight events.
-- `hypr-before-sleep-fix.sh`
-  - User-session hook to lock and save/disable keyboard backlight before suspend.
-- `hypr-after-sleep-fix.sh`
-  - User-session hook to recover the panel and restore keyboard backlight after resume.
-- `hypridle.conf.snippet`
-  - Snippet to merge into Omarchy's `hypridle` config.
-
-## Assumptions
-
-- You are using GRUB.
-- You are running a T2-capable kernel, typically `linux-t2`.
-- You are using Omarchy's Hyprland stack.
-- The Touch Bar scripts are written around the 2019 16-inch MacBook Pro layout and may need adjustment on other T2 Macs.
-
-## What The Scripts Change
-
-The base setup does four main things:
-
-1. Switches the kernel sleep path to `deep`.
-2. Uses `pcie_ports=compat` instead of `pcie_ports=native`.
-3. Installs a `systemd` suspend helper that unloads and reloads `apple-bce` around suspend.
-4. Disables conflicting legacy suspend hooks and `powertop.service`.
-
-The hybrid graphics script adds:
-
-- `options apple-gmux force_igd=y`
-- `i915.enable_guc=3`
-
-The user-session hooks add:
-
-- explicit keyboard backlight save/restore
-- Hyprland panel recovery after resume
-
-The Touch Bar repair adds:
-
-- a dedicated `t2-post-resume.service`
-- Touch Bar device re-enumeration and retry logic
-- delayed `tiny-dfr` startup only after the required device units are back
-
-## Install
-
-Run the commands from inside this directory.
-
-### 1. Apply the base suspend/wake fix
+Apply the base suspend fix:
 
 ```bash
 sudo bash ./apply-t2-mac-sleep-fix.sh
 sudo reboot
 ```
 
-### 2. On hybrid graphics models, apply the iGPU-first workaround
-
-This step matters on the 2019 16-inch model and other T2 MacBook Pros with both Intel and AMD graphics.
+On hybrid Intel/AMD models such as `MacBookPro16,1`, optionally apply the iGPU-first resume workaround:
 
 ```bash
 sudo bash ./apply-t2-igpu-resume-fix.sh
 sudo reboot
 ```
 
-If your machine is not a hybrid Intel/AMD model, do not blindly apply this step.
+Install the Hyprland user-session hooks:
 
-### 3. Install the Hyprland sleep hooks
+```bash
+install -Dm755 ./hypr-before-sleep-fix.sh ~/.local/bin/hypr-before-sleep-fix.sh
+install -Dm755 ./hypr-after-sleep-fix.sh ~/.local/bin/hypr-after-sleep-fix.sh
+systemctl --user enable --now hypridle.service
+```
 
-Copy the user-session hooks into place:
+If the Touch Bar still fails after resume:
+
+```bash
+sudo bash ./repair-t2-touchbar-resume.sh
+```
+
+Optional log cleanup:
+
+```bash
+sudo bash ./install-t2-touchbar-log-cleanup.sh
+```
+
+# DESCRIPTION
+
+This repository packages a working suspend and resume setup for T2 Macs using:
+
+- Omarchy / Arch Linux
+- `linux-t2`
+- Hyprland + `hypridle`
+- `tiny-dfr` for the Touch Bar
+
+The bundle was built and tested on:
+
+- Model: 2019 16-inch MacBook Pro
+- SMBIOS: `MacBookPro16,1`
+- Bootloader: GRUB
+
+The target problems are:
+
+- lid close detected but no real suspend
+- blank or half-restored display after wake
+- internal keyboard or trackpad missing after wake
+- keyboard backlight not restoring
+- Touch Bar failing to re-enumerate after resume
+
+# COMPONENTS
+
+`apply-t2-mac-sleep-fix.sh`
+
+- installs the base suspend/resume helper
+- sets the kernel in the direction of `mem_sleep_default=deep`
+- switches `pcie_ports=native` to `pcie_ports=compat`
+- disables conflicting legacy sleep hooks
+- disables `powertop.service`
+
+`apply-t2-igpu-resume-fix.sh`
+
+- adds the iGPU-first workaround for hybrid Intel/AMD T2 models
+- relevant to `MacBookPro16,1`
+
+`repair-t2-touchbar-resume.sh`
+
+- installs a dedicated `t2-post-resume.service`
+- adds retry logic for Touch Bar device re-enumeration
+- waits for the required `tiny-dfr` device units before starting `tiny-dfr`
+- disables older Touch Bar sleep hooks that race the service
+
+`repair-t2-suspend-helper.sh`
+
+- older helper repair kept for reference
+
+`hypr-before-sleep-fix.sh`
+
+- locks the session
+- saves keyboard backlight state
+- turns keyboard backlight off before suspend
+
+`hypr-after-sleep-fix.sh`
+
+- waits for resume to settle
+- repairs the panel state in Hyprland
+- restores keyboard backlight
+
+`hypridle.conf.snippet`
+
+- snippet to merge into `~/.config/hypr/hypridle.conf`
+
+`install-t2-touchbar-log-cleanup.sh`
+
+- optional cleanup for noisy Touch Bar backlight journal messages
+
+# REQUIREMENTS
+
+- GRUB
+- a T2-capable kernel, typically `linux-t2`
+- Omarchy's Hyprland stack
+- `tiny-dfr` if the machine uses the Touch Bar
+
+The Touch Bar logic in this repository is written around the `MacBookPro16,1` USB and device-unit layout. Other T2 Macs may require edits.
+
+# INSTALL PROCEDURE
+
+## 1. Base suspend/resume path
+
+Run:
+
+```bash
+sudo bash ./apply-t2-mac-sleep-fix.sh
+sudo reboot
+```
+
+This installs:
+
+- `/usr/local/libexec/t2-suspend-helper.sh`
+- `/usr/local/libexec/t2-post-resume.sh`
+- `/etc/systemd/system/suspend-fix-t2.service`
+- `/etc/systemd/system/t2-post-resume.service`
+
+It also disables these conflicting legacy hooks if present:
+
+- `/usr/lib/systemd/system-sleep/t2-fix`
+- `/usr/lib/systemd/system-sleep/touchbar-fix`
+- `/usr/lib/systemd/system-sleep/95-appletb-order`
+
+## 2. Hybrid graphics workaround
+
+On `MacBookPro16,1` and similar hybrid Intel/AMD models:
+
+```bash
+sudo bash ./apply-t2-igpu-resume-fix.sh
+sudo reboot
+```
+
+This is the script that pushes the machine toward:
+
+- `options apple-gmux force_igd=y`
+- `i915.enable_guc=3`
+
+Do not assume it belongs on every T2 Mac.
+
+## 3. Hyprland user-session hooks
+
+Install the helper scripts:
 
 ```bash
 install -Dm755 ./hypr-before-sleep-fix.sh ~/.local/bin/hypr-before-sleep-fix.sh
 install -Dm755 ./hypr-after-sleep-fix.sh ~/.local/bin/hypr-after-sleep-fix.sh
 ```
 
-Then merge the contents of `hypridle.conf.snippet` into your `~/.config/hypr/hypridle.conf`.
+Merge `hypridle.conf.snippet` into:
 
-At minimum, make sure `hypridle` runs:
+```text
+~/.config/hypr/hypridle.conf
+```
+
+Then enable or restart `hypridle`:
 
 ```bash
 systemctl --user enable --now hypridle.service
-```
-
-If it was already enabled, restart it:
-
-```bash
 systemctl --user restart hypridle.service
 ```
 
-### 4. If Touch Bar still breaks after resume
+## 4. Touch Bar recovery
 
-Run the Touch Bar repair:
+If suspend and resume work but the Touch Bar still comes back dead or half-alive:
 
 ```bash
 sudo bash ./repair-t2-touchbar-resume.sh
 ```
 
-That script installs a dedicated post-resume recovery service and does a best-effort current-boot recovery too.
+This keeps the dedicated `t2-post-resume.service` path and disables the older `system-sleep` Touch Bar hooks again, so the machine does not run multiple competing Touch Bar recovery paths at once.
 
-### 5. Optional: silence harmless Touch Bar backlight `systemd` log spam
+## 5. Optional log cleanup
 
-If suspend/wake works but your journal fills with messages like:
+If the system works but the journal fills with messages such as:
 
 - `systemd-backlight@backlight:appletb_backlight.service is masked`
 
@@ -139,102 +200,88 @@ run:
 sudo bash ./install-t2-touchbar-log-cleanup.sh
 ```
 
-This only suppresses the `systemd-backlight` queue attempt for `appletb_backlight`. It is not required for suspend to work.
+This is cosmetic only.
 
-## Omarchy / Hyprland Notes
+# OPERATING MODEL
 
-The Hyprland side matters on this setup.
+The intended resume path is:
 
-The two important user-session hooks are:
+- `suspend-fix-t2.service`
+- `t2-post-resume.service`
 
-- `hypr-before-sleep-fix.sh`
-  - locks the session
-  - saves keyboard backlight state
-  - turns keyboard backlight off before suspend
-- `hypr-after-sleep-fix.sh`
-  - waits for resume to settle
-  - disables the ghost `eDP-2` output
-  - cycles DPMS
-  - restores keyboard backlight explicitly
+That is the primary design assumption of this repository.
 
-Without those hooks, the machine can resume but still feel broken in practice.
+The machine is less reliable if older `system-sleep` hooks are still executable in parallel. Those hooks can race the dedicated post-resume service and leave the Touch Bar or input stack only partially restored.
 
-## Verify
+Also avoid adding ad-hoc udev `RUN+=` helpers for T2 Touch Bar or keyboard-backlight devices if those helpers call `udevadm settle`. Blocking the udev queue during resume can cause the post-resume service to time out.
 
-After setup, test at least two full lid-close cycles.
+# VERIFY
+
+After installation, test at least two complete lid-close cycles.
 
 Expected result:
 
-- close lid
-- machine actually suspends
-- open lid
-- screen comes back
+- the machine enters real suspend
+- the internal display comes back
 - unlock works
-- keyboard and trackpad work
-- keyboard backlight returns
-- Touch Bar returns if your machine uses it
+- internal keyboard and trackpad work
+- keyboard backlight restores
+- the Touch Bar returns, if present
 
-## Useful Debug Commands
+# DIAGNOSTICS
 
-### General suspend/wake
+General suspend/resume:
 
 ```bash
 journalctl -b --no-pager | rg "PM: suspend|Lid closed|Lid opened|Apple Internal Keyboard|t2-post-resume|tiny_dfr|amdgpu"
 ```
 
-### Touch Bar
+Touch Bar specific:
 
 ```bash
 journalctl -b -t t2-post-resume --no-pager
 systemctl status dev-tiny_dfr_display.device tiny-dfr.service --no-pager
 ```
 
-The updated post-resume helper also writes a small summary table here after wake,
-including:
-
-- suspend entered
-- suspend exited
-- time asleep
-- power source
-- battery before / after
-- battery delta
-- estimated sleep drain
-- matched log lines
-- unique issue types
-
-## Measuring Suspend Battery Drain
-
-Yes, you can use this setup to measure parasitic draw during suspend.
-
-The post-resume helper snapshots battery state immediately before suspend and
-again after wake, then logs the delta in the `t2-post-resume` summary table.
-
-For useful numbers:
-
-- test on battery, not on AC
-- use a longer sleep window, not a 60-90 second lid-close
-- run at least a few 30-60 minute tests
-- for a stronger check, do one overnight suspend on battery
-
-Short sleeps are still useful for functional testing, but they are too short to
-say much about real parasitic drain because battery counters can quantize or
-barely move.
-
-### Current kernel command line
+Current kernel command line:
 
 ```bash
 cat /proc/cmdline
 ```
 
-### User-side Hyprland hook status
+Hyprland idle hook status:
 
 ```bash
 systemctl --user status hypridle.service --no-pager
 ```
 
-## Known Good Direction For `MacBookPro16,1`
+The post-resume helper writes a compact summary into the journal after wake, including:
 
-On this model, the working direction was:
+- suspend entered
+- suspend exited
+- time asleep
+- power source before and after
+- battery delta
+- estimated sleep drain
+- matched error lines
+- unique issue buckets
+
+# BATTERY-DRAIN TESTING
+
+The post-resume helper snapshots battery state before suspend and after wake.
+
+For meaningful suspend drain numbers:
+
+- test on battery
+- prefer 30 to 60 minute tests over 60 to 90 second lid-close tests
+- run several cycles
+- do one longer overnight run if you care about parasitic drain
+
+Short tests are still useful for functional verification, but they are poor measurements.
+
+# KNOWN GOOD DIRECTION FOR `MacBookPro16,1`
+
+The configuration direction that worked on the test machine was:
 
 - `mem_sleep_default=deep`
 - `pcie_ports=compat`
@@ -242,90 +289,48 @@ On this model, the working direction was:
 - iGPU-first via `apple-gmux`
 - Hyprland post-resume panel recovery
 - explicit keyboard backlight save/restore
-- Touch Bar recovery via `t2-post-resume.service`
+- Touch Bar recovery through `t2-post-resume.service`
 
-## Noise You May Still See
+# EXPECTED NOISE
 
-Some logs are annoying without necessarily meaning the setup is broken.
-
-Examples:
+The following messages may still appear even when the machine wakes successfully:
 
 - `amdgpu ... Adding stream ... failed with err 28`
 - `amdgpu ... Cannot find any crtc or sizes`
 - `hid-appletb-bl ... usb_submit_urb(ctrl) failed: -1`
 
-On hybrid T2 Macs, these can appear during resume even when the machine wakes successfully.
+The practical question is not whether the journal is perfectly quiet. The practical question is whether:
 
-What usually matters more is whether:
+- input devices return
+- the display recovers
+- unlock works
+- `tiny-dfr` has live device units to bind to
 
-- the internal keyboard comes back
-- the display returns
-- the machine unlocks
-- the Touch Bar service has real device units to bind to
+# CAVEATS
 
-## Caveats
+- This repository is tuned around a 2019 16-inch T2 MacBook Pro.
+- Other T2 Macs may need different graphics and Touch Bar handling.
+- The Touch Bar logic is the most model-specific part of the bundle.
+- The hybrid graphics workaround is not universal.
+- This setup is materially better than stock suspend on this machine, but it is not macOS-grade.
 
-- This was built around a 2019 16-inch T2 MacBook Pro.
-- Other T2 Macs may need different handling, especially around graphics and Touch Bar USB paths.
-- The Touch Bar repair is the most model-specific part of this bundle.
-- The iGPU-first workaround is for hybrid graphics models. Do not assume it belongs on every T2 Mac.
+# REFERENCES
 
-## Why This Worked Better Than Earlier Attempts
-
-The key fix was moving post-resume recovery into a real `systemd` unit instead of launching a background worker from `ExecStop`.
-
-That made the BCE input recovery survive the suspend/resume transaction reliably enough for:
-
-- keyboard and trackpad to return
-- Touch Bar recovery to happen after resume, not during service teardown
-
-## Robustness
-
-This is good enough to call a working T2 Linux suspend solution for Omarchy on
-`MacBookPro16,1`, but I would not call it perfect or macOS-grade yet.
-
-What is strong now:
-
-- lid close reaches real suspend
-- wake returns the internal display and input devices
-- keyboard backlight is handled explicitly in user space
-- Touch Bar recovery is materially better than the stock path
-- the post-resume journal summary makes failures measurable
-
-What is still weaker than a native macOS experience:
-
-- the setup still relies on model-specific suspend helpers and recovery hooks
-- hybrid graphics remains the least elegant part of the stack
-- Touch Bar recovery is the most fragile path
-- some resume-time kernel noise is still expected on T2 Linux
-
-If you want to keep refining it, the right next step is not more blind tweaking.
-It is measuring longer battery-backed suspends and then tuning against real
-drain numbers and repeatable failure signatures.
-
-## References
-
-These links were the most relevant sources used to assemble this setup. All were checked and live on April 4, 2026.
+Relevant upstream material:
 
 - [t2linux State](https://wiki.t2linux.org/state/)
-  - Best high-level status page for suspend, Touch Bar, hybrid graphics, and known T2 limitations.
 - [t2linux Post-Install Guide](https://wiki.t2linux.org/guides/postinstall/)
-  - The most relevant upstream suspend workaround reference, including `apple-bce` handling and Touch Bar / `tiny-dfr` notes.
 - [t2linux Hybrid Graphics Guide](https://wiki.t2linux.org/guides/hybrid-graphics/)
-  - Directly relevant for `MacBookPro16,1`, including `apple-gmux force_igd=y` and `i915.enable_guc=3` for black-screen resume issues.
-- [Omarchy Issue #1840: lid/sleep/suspend on MacBook](https://github.com/basecamp/omarchy/issues/1840)
-  - The most relevant Omarchy-specific suspend thread and a useful pointer for Hyprland-side sleep behavior.
+- [Omarchy Issue #1840](https://github.com/basecamp/omarchy/issues/1840)
 - [t2linux/apple-bce-drv](https://github.com/t2linux/apple-bce-drv)
-  - Core driver stack behind BCE/VHCI input devices on T2 Macs, including the keyboard/trackpad path that made resume recovery necessary.
 - [AsahiLinux/tiny-dfr](https://github.com/AsahiLinux/tiny-dfr)
-  - The daemon used for dynamic Touch Bar function row behavior on Linux.
 
-## Sharing / Reuse
+# REUSE
 
-If you reuse this on another T2 Omarchy machine:
+If you apply this to another T2 Omarchy machine:
 
 1. Start with the base script.
-2. Only add the iGPU script if you are on a hybrid Intel/AMD model.
+2. Only add the iGPU script on hybrid Intel/AMD hardware.
 3. Install the Hyprland hooks.
-4. Only add the Touch Bar repair if you actually need it.
-5. Treat the log cleanup script as optional polish, not part of the core fix.
+4. Only add the Touch Bar repair if the stock path still fails.
+5. Treat the log cleanup script as optional.

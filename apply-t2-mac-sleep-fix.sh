@@ -331,6 +331,10 @@ if [[ -e /usr/lib/systemd/system-sleep/touchbar-fix ]]; then
   chmod -x /usr/lib/systemd/system-sleep/touchbar-fix
 fi
 
+if [[ -e /usr/lib/systemd/system-sleep/95-appletb-order ]]; then
+  chmod -x /usr/lib/systemd/system-sleep/95-appletb-order
+fi
+
 if [[ ! -f /etc/default/grub ]]; then
   echo "/etc/default/grub is missing; update the active bootloader config manually." >&2
   exit 1
@@ -371,7 +375,7 @@ echo "Current suspend helper:"
 systemctl cat suspend-fix-t2.service
 echo
 echo "Disabled legacy hooks:"
-ls -l /usr/lib/systemd/system-sleep/t2-fix /usr/lib/systemd/system-sleep/touchbar-fix 2>/dev/null || true
+ls -l /usr/lib/systemd/system-sleep/t2-fix /usr/lib/systemd/system-sleep/touchbar-fix /usr/lib/systemd/system-sleep/95-appletb-order 2>/dev/null || true
 echo
 echo "powertop.service:"
 systemctl is-enabled powertop.service 2>/dev/null || true
